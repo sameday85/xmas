@@ -1,8 +1,10 @@
 # xmas
 
-Christmas tree lighting project
+Christmas tree lighting project based on rpi_ws281x. Total 10 effects are implemented.
+The light will be on from 5pm - 9pm. After 9pm, if the room light is off, 
+the tree lighting will be turned off. Pushing the button to run all effects once for demonstration.
 
-###rpi_ws281x
+### rpi_ws281x
 
 Userspace Raspberry Pi library for controlling WS281X LEDs.
 This includes WS2812 and SK6812RGB RGB LEDs
