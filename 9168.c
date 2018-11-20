@@ -48,7 +48,8 @@
 
 #define STATE_OFF               0
 #define STATE_DEMO              1
-#define STATE_SHOW              2
+#define STATE_DEBUG             2
+#define STATE_SHOW              3
 
 #define TIME_HOUR_START         17
 #define TIME_HOUR_END           21
@@ -105,13 +106,6 @@ void ctrl_c_handler(int signum) {
     running = 0;
 }
 
-void turn_on_snowman() {
-    digitalWrite(PIN_SNOWMAN, HIGH);
-}
-
-void turn_off_snowman() {
-    digitalWrite(PIN_SNOWMAN, LOW);
-}
 
 /*! \brief Convert RGB to HSV color space
   
@@ -179,9 +173,9 @@ void RGBtoHSV(Color r, Color g, Color b, float* pH, float *pS, float *pV) {
   the input HSV values are in the ranges h = [0, 360], and s, v =
   [0, 1], respectively.
   
-  \param fR Red component, used as output, range: [0, 1]
-  \param fG Green component, used as output, range: [0, 1]
-  \param fB Blue component, used as output, range: [0, 1]
+  \param fR Red component, used as output, range: [0, 255]
+  \param fG Green component, used as output, range: [0, 255]
+  \param fB Blue component, used as output, range: [0, 255]
   \param fH Hue component, used as input, range: [0, 360]
   \param fS Hue component, used as input, range: [0, 1]
   \param fV Hue component, used as input, range: [0, 1]
@@ -263,6 +257,14 @@ Color next_clr() {
     return color;
 }
 
+Color random_clr() {
+    float h = 4.0f * next_int(90); //0-360
+    float s = 4.0f * next_int(25) / 100; //0-1
+    float v = 0.5f + 1.0f * next_int(50)/50; //0-1
+    Color r,g,b;
+    HSVtoRGB(&r, &g, &b, h, s, v);
+    return rgb(r,g,b);
+}
 
 void set_pixel_hsv(int pos, float h, float s, float v) {
     Color pixel, r, g, b;
@@ -299,8 +301,6 @@ void turn_off() {
         set_pixel(i, rgb(0,0,0));
     }
     show();
-    
-    turn_off_snowman();
 }
 
 void color_slide() {
@@ -495,8 +495,9 @@ bool should_be_off() {
     return  turn_off;
 }
 
-void show_effects(bool random) {
-    int sel = random ? next_int(10) : 0;
+void show_effects(bool random, int sel) {
+    if (sel < 0)
+        sel = random ? next_int(11) : 0;
     
     if (running && (!random || sel == 0)) {
         if (debug) 
@@ -528,45 +529,66 @@ void show_effects(bool random) {
     
     if (running && (!random || sel == 4)) {
         if (debug)
+            printf("Color wipe random color\n");
+        color_wipe(random_clr());
+        delay(INTERVAL_WAIT_MS);
+    }
+    
+    if (running && (!random || sel == 5)) {
+        if (debug)
             printf("Theater chase W ...\n");
         theater_chase(rgb(127, 127, 127)); // White
         delay(INTERVAL_WAIT_MS);
     }
     
-    if (running && (!random || sel == 5)) {
+    if (running && (!random || sel == 6)) {
         if (debug)
             printf("Theater chase R ...\n");
         theater_chase(rgb(127,   0,   0)); // Red
         delay(INTERVAL_WAIT_MS);
     }
     
-    if (running && (!random || sel == 6)) {
+    if (running && (!random || sel == 7)) {
         if (debug)
             printf("Theater chase B ...\n");
         theater_chase(rgb(  0,   0, 127)); // Blue
         delay(INTERVAL_WAIT_MS);
     }
     
-    if (running && (!random || sel == 7)) {
+    if (running && (!random || sel == 8)) {
         if (debug)
             printf("Rainbow...\n");
         rainbow();
         delay(INTERVAL_WAIT_MS);
     }
     
-    if (running && (!random || sel == 8)) {
+    if (running && (!random || sel == 9)) {
         if (debug)
             printf("Twinkle ...\n");
         twinkle();
         delay(INTERVAL_WAIT_MS);
     }
     
-    if (running && (!random || sel == 9)) {
+    if (running && (!random || sel == 10)) {
         if (debug)
             printf("Theater chase rainbow ...\n");
         theater_chase_rainbow();
         delay(INTERVAL_WAIT_MS);
     }   
+}
+
+void will_sart_show() {
+    //turn off led
+    digitalWrite(PIN_LED, LOW);
+    //turn on snowman
+    digitalWrite(PIN_SNOWMAN, HIGH);
+}
+
+void show_did_end(){
+    //turn off led
+    digitalWrite(PIN_LED, LOW);
+    //turn off snowman
+    digitalWrite(PIN_SNOWMAN, LOW);
 }
 
 //gcc -Wall 9168.c mailbox.c ws2811.c pwm.c pcm.c dma.c rpihw.c -lwiringPi -lwiringPiDev -lm
@@ -593,11 +615,15 @@ int main(int argc, char *argv[]) {
 
     state = STATE_OFF;
     ticket = 0;
+    debug = 1;
     turn_off();
    
     if (argc > 1) {
         if (strcmp(argv[1], "demo") == 0) {
             state=STATE_DEMO;
+        }
+        else if (strcmp(argv[1], "debug") == 0) {
+            state=STATE_DEBUG;
         }
         else {
             //autorun at boot up
@@ -613,8 +639,8 @@ int main(int argc, char *argv[]) {
             if (should_be_on()) {
                 rounds = 0;
                 stop_condition=STOP_CONDITION_TIME;
-                turn_on_snowman();
                 state = STATE_SHOW;
+                will_sart_show();
             }
             else if (digitalRead(PIN_BTN) == HIGH) {
                 state = STATE_DEMO;
@@ -624,18 +650,27 @@ int main(int argc, char *argv[]) {
             delay(INTERVAL_WAIT_MS);
             break;
         case STATE_DEMO:
-            turn_on_snowman();
-            show_effects(false);
+            will_sart_show();
+            show_effects(false, -1);
             turn_off();
             state = STATE_OFF;
+            show_did_end();
+            break;
+        case STATE_DEBUG:
+            will_sart_show();
+            show_effects(true, 4);
+            turn_off();
+            show_did_end();
+            delay(INTERVAL_WAIT_MS);
             break;
         case STATE_SHOW:
             if (should_be_off()) {
                 state = STATE_OFF;
                 turn_off();
+                show_did_end();
             }
             else {
-                show_effects(rounds >= 10);
+                show_effects(rounds >= 2, -1);
                 if (rounds < 100)
                     ++rounds;
             }
@@ -644,6 +679,7 @@ int main(int argc, char *argv[]) {
         //printf("Charging time=%d\n", get_charging_time());
     }
     digitalWrite(PIN_LED, LOW);
+    digitalWrite(PIN_SNOWMAN, LOW);
     turn_off();
     ws2811_fini(&ledstring);
     free (led_strip);
