@@ -1,3 +1,4 @@
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +29,7 @@
 #define PIN_LDR     29
 #define PIN_BTN     28
 #define PIN_LED     27
+#define PIN_SNOWMAN 7
 
 #define ARRAY_SIZE(stuff)       (sizeof(stuff) / sizeof(stuff[0]))
 
@@ -101,6 +103,14 @@ uint8_t running = 1;
 void ctrl_c_handler(int signum) {
     (void)(signum);
     running = 0;
+}
+
+void turn_on_snowman() {
+    digitalWrite(PIN_SNOWMAN, HIGH);
+}
+
+void turn_off_snowman() {
+    digitalWrite(PIN_SNOWMAN, LOW);
 }
 
 /*! \brief Convert RGB to HSV color space
@@ -289,6 +299,8 @@ void turn_off() {
         set_pixel(i, rgb(0,0,0));
     }
     show();
+    
+    turn_off_snowman();
 }
 
 void color_slide() {
@@ -569,7 +581,9 @@ int main(int argc, char *argv[]) {
     wiringPiSetup();
     pinMode (PIN_BTN, INPUT); 
     pinMode (PIN_LED, OUTPUT); 
+    pinMode (PIN_SNOWMAN, OUTPUT); 
     digitalWrite(PIN_LED, LOW);
+    digitalWrite(PIN_SNOWMAN, LOW);
     
     if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS) {
         fprintf(stderr, "Initialization failed: %s\n", ws2811_get_return_t_str(ret));
@@ -599,6 +613,7 @@ int main(int argc, char *argv[]) {
             if (should_be_on()) {
                 rounds = 0;
                 stop_condition=STOP_CONDITION_TIME;
+                turn_on_snowman();
                 state = STATE_SHOW;
             }
             else if (digitalRead(PIN_BTN) == HIGH) {
@@ -609,6 +624,7 @@ int main(int argc, char *argv[]) {
             delay(INTERVAL_WAIT_MS);
             break;
         case STATE_DEMO:
+            turn_on_snowman();
             show_effects(false);
             turn_off();
             state = STATE_OFF;
