@@ -53,6 +53,7 @@
 
 #define TIME_HOUR_START         17
 #define TIME_HOUR_END           21
+
 #define STOP_CONDITION_TIME     0
 #define STOP_CONDITION_LIGHT    1
 
@@ -114,9 +115,9 @@ void ctrl_c_handler(int signum) {
   output HSV values are in the ranges h = [0, 360], and s, v = [0,
   1], respectively.
   
-  \param fR Red component, used as input, range: [0, 1]
-  \param fG Green component, used as input, range: [0, 1]
-  \param fB Blue component, used as input, range: [0, 1]
+  \param fR Red component, used as input, range: [0, 255]
+  \param fG Green component, used as input, range: [0, 255]
+  \param fB Blue component, used as input, range: [0, 255]
   \param fH Hue component, used as output, range: [0, 360]
   \param fS Hue component, used as output, range: [0, 1]
   \param fV Hue component, used as output, range: [0, 1]
@@ -296,7 +297,7 @@ void show() {
     ws2811_render(&ledstring);
 }
 
-void turn_off() {
+void turn_off_led_strip() {
     for (int i = 0; i < LED_COUNT; ++i) {
         set_pixel(i, rgb(0,0,0));
     }
@@ -442,11 +443,12 @@ int timedifference_msec(struct timeval t0, struct timeval t1)
     return (t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_usec - t0.tv_usec) / 1000;
 }
 
+//daylight: around 270ms; ceiling light on: 580ms; ceiling light off:1313ms
 int get_charging_time() {
     int pin = PIN_LDR;
-    int val, wait=1200;
+    int val, wait=1300;
     struct timeval t0, t1;
-    
+
     pinMode (pin, OUTPUT);
     digitalWrite(pin, LOW); 
     delay(1000);
@@ -468,13 +470,14 @@ int get_charging_time() {
     return timedifference_msec(t0, t1);
 }
 
-bool should_be_on() {
+bool should_be_on(int *hours_to_go) {
     struct tm *timeinfo ;
     time_t rawtime ;
     
     rawtime = time (NULL) ;
     timeinfo = localtime(&rawtime) ;
 
+    *hours_to_go = TIME_HOUR_START - timeinfo->tm_hour;
     return (timeinfo->tm_hour >= TIME_HOUR_START) && (timeinfo->tm_hour < TIME_HOUR_END);
 }
 
@@ -593,7 +596,7 @@ void show_did_end(){
 
 //gcc -Wall 9168.c mailbox.c ws2811.c pwm.c pcm.c dma.c rpihw.c -lwiringPi -lwiringPiDev -lm
 int main(int argc, char *argv[]) {
-    int state, ticket, rounds;
+    int state, ticket1, ticket2, hours_to_go;
     ws2811_return_t ret;
     
     srand(time(NULL));
@@ -614,9 +617,9 @@ int main(int argc, char *argv[]) {
     led_strip = malloc(sizeof(ws2811_led_t) * LED_COUNT + 12);
 
     state = STATE_OFF;
-    ticket = 0;
+    ticket1 = ticket2 = 0;
     debug = 1;
-    turn_off();
+    turn_off_led_strip();
    
     if (argc > 1) {
         if (strcmp(argv[1], "demo") == 0) {
@@ -632,12 +635,11 @@ int main(int argc, char *argv[]) {
             delay (2 * 60 * 1000);
         }
     }
-    
+
     while (running) {
         switch (state) {
         case STATE_OFF:
-            if (should_be_on()) {
-                rounds = 0;
+            if (should_be_on(&hours_to_go)) {
                 stop_condition=STOP_CONDITION_TIME;
                 state = STATE_SHOW;
                 will_sart_show();
@@ -645,34 +647,43 @@ int main(int argc, char *argv[]) {
             else if (digitalRead(PIN_BTN) == HIGH) {
                 state = STATE_DEMO;
             }
-            digitalWrite(PIN_LED, ((state == STATE_OFF) && (ticket & 1) == 1) ? HIGH : LOW);
-            ticket = (ticket + 1) & 3;
-            delay(INTERVAL_WAIT_MS);
+            else {
+                digitalWrite(PIN_LED, (ticket1 & 1) ? HIGH : LOW);
+                //flashing the snowman
+                if ((hours_to_go > 0) && (hours_to_go <= 1)) {
+                    digitalWrite(PIN_SNOWMAN, (ticket2 & 1) ? HIGH : LOW);
+                }
+                ticket1 = (ticket1 + 1) & 0xff;
+                ticket2 = ticket1 >> 1;
+                delay(1000);
+            }
             break;
         case STATE_DEMO:
             will_sart_show();
             show_effects(false, -1);
-            turn_off();
+            turn_off_led_strip();
             state = STATE_OFF;
             show_did_end();
             break;
         case STATE_DEBUG:
+        /*
             will_sart_show();
             show_effects(true, 4);
-            turn_off();
+            turn_off_led_strip();
             show_did_end();
-            delay(INTERVAL_WAIT_MS);
+        */ 
+            printf("Charging time: %d\n", get_charging_time());
+            delay(1000);
             break;
         case STATE_SHOW:
             if (should_be_off()) {
                 state = STATE_OFF;
-                turn_off();
+                turn_off_led_strip();
                 show_did_end();
+                ticket1 = ticket2 = 0;
             }
             else {
-                show_effects(rounds >= 2, -1);
-                if (rounds < 100)
-                    ++rounds;
+                show_effects(true, -1);
             }
             break;
         }
@@ -680,11 +691,11 @@ int main(int argc, char *argv[]) {
     }
     digitalWrite(PIN_LED, LOW);
     digitalWrite(PIN_SNOWMAN, LOW);
-    turn_off();
+    turn_off_led_strip();
     ws2811_fini(&ledstring);
     free (led_strip);
-    
-    printf("Done\n");
+    if (debug)
+        printf("Done\n");
     return ret;
 }
 
