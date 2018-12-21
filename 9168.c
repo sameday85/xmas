@@ -28,14 +28,14 @@
 
 #define PIN_LDR     29
 #define PIN_BTN     28
-#define PIN_LED     27
-#define PIN_SNOWMAN 7
+#define PIN_LED     4
+#define PIN_SNOWMAN 2
 
 #define ARRAY_SIZE(stuff)       (sizeof(stuff) / sizeof(stuff[0]))
 
 // defaults for cmdline options
 #define TARGET_FREQ             WS2811_TARGET_FREQ
-#define GPIO_PIN                12
+#define GPIO_PIN                12 //wiring pi #26
 #define DMA                     10
 #define STRIP_TYPE              WS2811_STRIP_GRB        // WS2812/SK6812RGB integrated chip+leds
 
@@ -443,7 +443,7 @@ int timedifference_msec(struct timeval t0, struct timeval t1)
     return (t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_usec - t0.tv_usec) / 1000;
 }
 
-//daylight: around 270ms; ceiling light on: 580ms; ceiling light off:1313ms
+//daylight: around 270ms
 int get_charging_time() {
     int pin = PIN_LDR;
     int val, wait=1300;
@@ -462,8 +462,6 @@ int get_charging_time() {
         wait -= 10;
         val=digitalRead(pin);
     }
-    pinMode (pin, OUTPUT);
-    digitalWrite(pin, LOW); 
     
     gettimeofday(&t1, 0);
     
@@ -666,14 +664,16 @@ int main(int argc, char *argv[]) {
             show_did_end();
             break;
         case STATE_DEBUG:
-        /*
             will_sart_show();
             show_effects(true, 4);
             turn_off_led_strip();
             show_did_end();
-        */ 
-            printf("Charging time: %d\n", get_charging_time());
-            delay(1000);
+/*
+            digitalWrite(PIN_LED, HIGH);
+            if (digitalRead(PIN_BTN) == HIGH)
+                printf("Button!!!!\n");
+            printf("Charging time: %d\n", get_charging_time());*/
+            delay(100);
             break;
         case STATE_SHOW:
             if (should_be_off()) {
@@ -698,4 +698,5 @@ int main(int argc, char *argv[]) {
         printf("Done\n");
     return ret;
 }
+
 
