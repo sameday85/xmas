@@ -39,9 +39,9 @@
 #define DMA                     10
 #define STRIP_TYPE              WS2811_STRIP_GRB        // WS2812/SK6812RGB integrated chip+leds
 
-#define WIDTH                   150
+#define WIDTH                   300
 #define HEIGHT                  1
-#define LED_COUNT               150 //(WIDTH * HEIGHT)
+#define LED_COUNT               300 //(WIDTH * HEIGHT)
 
 #define EFFECT_WAIT_MS          50
 #define INTERVAL_WAIT_MS        500
@@ -258,10 +258,19 @@ Color next_clr() {
     return color;
 }
 
-Color random_clr() {
+void random_hsv_clr(float *ph, float *ps, float *pv) {
     float h = 4.0f * next_int(90); //0-360
     float s = 4.0f * next_int(25) / 100; //0-1
     float v = 0.5f + 1.0f * next_int(50)/50; //0-1
+    
+    *ph = h;
+    *ps = s;
+    *pv = v;
+}
+
+Color random_rgb_clr() {
+    float h, s, v;
+    random_hsv_clr(&h, &s, &v);
     Color r,g,b;
     HSVtoRGB(&r, &g, &b, h, s, v);
     return rgb(r,g,b);
@@ -278,7 +287,7 @@ void set_pixel_hsv(int pos, float h, float s, float v) {
         led_strip[pos]=pixel;
 }
 
-void set_pixel(int pos, Color pixel) {
+void set_pixel_rgb(int pos, Color pixel) {
     Color r = (pixel >> 16) & 0xff;
     Color g = (pixel >> 8) & 0xff;
     Color b = pixel & 0xff;
@@ -299,23 +308,23 @@ void show() {
 
 void turn_off_led_strip() {
     for (int i = 0; i < LED_COUNT; ++i) {
-        set_pixel(i, rgb(0,0,0));
+        set_pixel_rgb(i, rgb(0,0,0));
     }
     show();
 }
 
 void color_slide() {
     Color color = next_clr();
-    int wait_ms=EFFECT_WAIT_MS, slide_size=10;
+    int wait_ms=EFFECT_WAIT_MS, slide_size=20;
     int destination = LED_COUNT - slide_size;
     int pos = 0;
     while (destination >= 0) {
         while (pos <= destination) {
             for (int i = pos - slide_size; i < pos; ++i) {
-                set_pixel(i, rgb(0,0,0));
+                set_pixel_rgb(i, rgb(0,0,0));
             }
             for (int i = pos; i < pos + slide_size; ++i) {
-                set_pixel(i, color);
+                set_pixel_rgb(i, color);
             }
             show();
             delay(wait_ms);
@@ -330,7 +339,7 @@ void color_wipe(Color color) {
     int wait_ms=EFFECT_WAIT_MS;
     //"""Wipe color across display a pixel at a time."""
     for (int i = 0; i < LED_COUNT; ++i) {
-        set_pixel(i, color);
+        set_pixel_rgb(i, color);
         show();
         delay(wait_ms);
     }
@@ -342,12 +351,12 @@ void theater_chase(Color color) {
     for (int j = 0; j < iterations; ++j) {
         for (int q = 0; q < 3; ++q) {
             for (int i = 0; i < LED_COUNT; i+=3) {
-                set_pixel(i+q, color);
+                set_pixel_rgb(i+q, color);
             }
             show();
             delay(wait_ms);
             for (int i = 0; i < LED_COUNT; i+=3) {
-                set_pixel(i+q, 0);
+                set_pixel_rgb(i+q, 0);
             }
         }
     }
@@ -388,7 +397,7 @@ void twinkle() {
         }
         //copy over
         for (int i = 0; i < LED_COUNT; ++i)
-            set_pixel(i, led_on[i]);
+            set_pixel_rgb(i, led_on[i]);
         show();
         delay(wait_ms);
     }
@@ -415,17 +424,44 @@ void theater_chase_rainbow() {
     for (int j = 0; j < 48 ; ++j) {
         for (int q = 0; q < 3; ++q) {
             for (int i=0; i < LED_COUNT; i+= 3) {
-                set_pixel(i+q, wheel((i+j) % 255));
+                set_pixel_rgb(i+q, wheel((i+j) % 255));
             }
             show();
             delay(wait_ms);
             for (int i = 0; i < LED_COUNT; i+=3) {
-                set_pixel(i+q, 0);
+                set_pixel_rgb(i+q, 0);
             }
         }
     }
 }
 
+
+void meteorite() {
+    float h, s, v;
+    int wait_ms=EFFECT_WAIT_MS, meteorite_length=50;
+    float *v_gradient = (float*)malloc(sizeof(float) * meteorite_length);
+    
+    random_hsv_clr(&h, &s, &v);
+    float vstep = v / meteorite_length;
+    for (int i = 0; i < meteorite_length; ++i)
+        v_gradient[i] = v - i * vstep;
+    
+    int alignment = 0 - meteorite_length + 1;
+    while (alignment < meteorite_length * 2) {
+        for (int i = 0; i < LED_COUNT; ++i) {
+            int pos = i % meteorite_length + alignment;
+            if (pos < 0 || pos >= meteorite_length)
+                set_pixel_rgb(i, rgb(0,0,0));
+            else
+                set_pixel_hsv(i, h, s, v_gradient[pos]);
+        }
+        show();
+        delay(wait_ms);
+        ++alignment;
+    }    
+    
+    free (v_gradient);
+}
 
 void setup_handlers(void)
 {
@@ -498,7 +534,7 @@ bool should_be_off() {
 
 void show_effects(bool random, int sel) {
     if (sel < 0)
-        sel = random ? next_int(11) : 0;
+        sel = random ? next_int(12) : 0;
     
     if (running && (!random || sel == 0)) {
         if (debug) 
@@ -531,7 +567,7 @@ void show_effects(bool random, int sel) {
     if (running && (!random || sel == 4)) {
         if (debug)
             printf("Color wipe random color\n");
-        color_wipe(random_clr());
+        color_wipe(random_rgb_clr());
         delay(INTERVAL_WAIT_MS);
     }
     
@@ -574,6 +610,12 @@ void show_effects(bool random, int sel) {
         if (debug)
             printf("Theater chase rainbow ...\n");
         theater_chase_rainbow();
+        delay(INTERVAL_WAIT_MS);
+    }   
+    if (running && (!random || sel == 11)) {
+        if (debug)
+            printf("Meteorite ...\n");
+        meteorite();
         delay(INTERVAL_WAIT_MS);
     }   
 }
@@ -665,7 +707,7 @@ int main(int argc, char *argv[]) {
             break;
         case STATE_DEBUG:
             will_sart_show();
-            show_effects(true, 4);
+            show_effects(true, 11);
             turn_off_led_strip();
             show_did_end();
 /*
